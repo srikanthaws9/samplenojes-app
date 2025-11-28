@@ -1,4 +1,4 @@
-name: CI/CD to EC2
+name: CI/CD to EC2 to Production
 
 on:
   workflow_dispatch:       # allow manual trigger
@@ -7,8 +7,8 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    environment:
-      name: production # specify the environment name
+    # environment:
+    #   name: production # specify the environment name
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
