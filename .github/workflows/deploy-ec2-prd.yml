@@ -1,0 +1,60 @@
+name: CI/CD to EC2
+
+on:
+  workflow_dispatch:       # allow manual trigger
+    branches: [ "main" ]   # run on every push to main
+                          # allow manual trigger
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    environment:
+      name: production # specify the environment name
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"   # or any LTS version you use
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests
+        run: npm test
+
+  deploy:
+    needs: build-and-test        # run only if build/test successful
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Add SSH key
+        run: |
+          echo "${{ secrets.EC2_SSH_KEY }}" > ec2_key
+          chmod 600 ec2_key
+
+      - name: Deploy to EC2 and restart app
+        run: |
+          # Copy files to EC2 (rsync)
+          rsync -avz -e "ssh -i ec2_key -o StrictHostKeyChecking=no" \
+            --exclude ".git" \
+            --exclude "node_modules" \
+            ./ \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ secrets.EC2_APP_DIR }}
+
+          # Connect to EC2 and restart app
+          ssh -i ec2_key -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+            cd ${{ secrets.EC2_APP_DIR }}
+            npm install --production
+            # Start/restart using pm2
+            if pm2 list | grep -q "node-ec2-sample"; then
+              pm2 restart node-ec2-sample
+            else
+              pm2 start index.js --name node-ec2-sample
+            fi
+            pm2 save
+          EOF
